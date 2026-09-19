@@ -106,11 +106,18 @@ export async function postFirstThread(input: FirstPostInput): Promise<string> {
     text: input.text,
   };
 
-  // トピックタグ: 公式ドキュメントに明記されたパラメータではないため、
-  // 送っても無視される可能性がある(実地でのテスト投稿で要確認)。
-  // 空欄でなければ試験的に付与する。
+  // トピックタグ: 公式ドキュメントに明記されたパラメータではないが、実地確認で機能することを確認済み。
+  // 50文字を超えるとAPIエラーになるが、日本語ではバイト数(UTF-8)で判定されているようなので
+  // 文字数ではなくバイト数でチェックする。超過時はタグなしで投稿を続行する(投稿全体を失敗させない)。
   if (input.topicTag) {
-    carouselParams.topic_tag = input.topicTag;
+    const byteLength = new TextEncoder().encode(input.topicTag).length;
+    if (byteLength <= 50) {
+      carouselParams.topic_tag = input.topicTag;
+    } else {
+      console.warn(
+        `トピックタグがバイト数換算で50を超えているため、今回はタグなしで投稿します(${byteLength}バイト): "${input.topicTag}"`
+      );
+    }
   }
 
   const carouselContainer = await callThreadsApi(`/${userId}/threads`, carouselParams);
