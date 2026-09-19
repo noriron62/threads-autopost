@@ -50,6 +50,7 @@ async function callThreadsApi(
     const message = data?.error?.message ?? JSON.stringify(data);
     // access_tokenは伏せて、それ以外に送ったパラメータをログに出す(原因特定用)
     console.error(`Threads API エラーの詳細(${path}):`, JSON.stringify(params));
+    console.error(`Threads API エラーオブジェクト全体(${path}):`, JSON.stringify(data?.error ?? data));
     throw new Error(`Threads API エラー(${path}): ${message}`);
   }
 
