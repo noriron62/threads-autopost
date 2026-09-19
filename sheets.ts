@@ -132,11 +132,27 @@ export async function findDueRows(spreadsheetId: string): Promise<PostRow[]> {
 
 function parseDateCell(value: string | undefined): Date | null {
   if (!value) return null;
-  // "2026-09-25 19:00" のような形式を想定
-  const normalized = value.trim().replace(" ", "T") + "+09:00";
-  const date = new Date(normalized);
-  if (isNaN(date.getTime())) return null;
-  return date;
+
+  // "2026-09-19 19:00" でも "2026/09/19 23:52:00" でも読み取れるようにする
+  const match = value
+    .trim()
+    .match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+
+  if (!match) return null;
+
+  const [, year, month, day, hour, minute, second] = match;
+
+  // 日本時間として解釈し、UTCに変換して比較できるDateを作る
+  const utcMillis = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour) - 9, // JST → UTC
+    Number(minute),
+    Number(second ?? "0")
+  );
+
+  return new Date(utcMillis);
 }
 
 // ============================================
