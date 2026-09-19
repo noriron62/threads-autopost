@@ -79,7 +79,8 @@ async function createCarouselItemContainer(imageUrl: string): Promise<string> {
 interface FirstPostInput {
   text: string; // 1/2本文
   imageUrls: string[]; // 2〜4枚
-  topicTag?: string; // 空欄なら未指定
+  // トピックタグはカルーセル(複数画像)には設定できない仕様のため、ここでは扱わない。
+  // 2/2(単一投稿)側のSecondPostInput.topicTagで付与する。
 }
 
 /**
@@ -108,20 +109,6 @@ export async function postFirstThread(input: FirstPostInput): Promise<string> {
     text: input.text,
   };
 
-  // トピックタグ: 公式ドキュメントに明記されたパラメータではないが、実地確認で機能することを確認済み。
-  // 50文字を超えるとAPIエラーになるが、日本語ではバイト数(UTF-8)で判定されているようなので
-  // 文字数ではなくバイト数でチェックする。超過時はタグなしで投稿を続行する(投稿全体を失敗させない)。
-  if (input.topicTag) {
-    const byteLength = new TextEncoder().encode(input.topicTag).length;
-    if (byteLength <= 50) {
-      carouselParams.topic_tag = input.topicTag;
-    } else {
-      console.warn(
-        `トピックタグがバイト数換算で50を超えているため、今回はタグなしで投稿します(${byteLength}バイト): "${input.topicTag}"`
-      );
-    }
-  }
-
   const carouselContainer = await callThreadsApi(`/${userId}/threads`, carouselParams);
   const creationId = carouselContainer.id as string;
 
@@ -144,6 +131,7 @@ interface SecondPostInput {
   text: string; // 2/2本文(アフィリエイトリンクを含む)
   imageUrl?: string; // 1枚。空欄なら文字だけの投稿にする
   replyToId: string; // 1/2投稿のID
+  topicTag?: string; // トピックタグ(単一投稿でのみ有効。カルーセルには付けられない)
 }
 
 export async function postSecondThread(input: SecondPostInput): Promise<string> {
@@ -156,6 +144,19 @@ export async function postSecondThread(input: SecondPostInput): Promise<string> 
   };
   if (input.imageUrl) {
     params.image_url = input.imageUrl;
+  }
+
+  // トピックタグ: 日本語はバイト数(UTF-8)で50バイトまでの制限があるようなので、
+  // 文字数ではなくバイト数でチェックする。超過時はタグなしで投稿を続行する(投稿全体を失敗させない)。
+  if (input.topicTag) {
+    const byteLength = new TextEncoder().encode(input.topicTag).length;
+    if (byteLength <= 50) {
+      params.topic_tag = input.topicTag;
+    } else {
+      console.warn(
+        `トピックタグがバイト数換算で50を超えているため、今回はタグなしで投稿します(${byteLength}バイト): "${input.topicTag}"`
+      );
+    }
   }
 
   const container = await callThreadsApi(`/${userId}/threads`, params);
@@ -221,7 +222,6 @@ export async function postFullThread(plan: ThreadPostPlan): Promise<ThreadPostRe
   const firstPostId = await postFirstThread({
     text: plan.text1,
     imageUrls: plan.photoUrls,
-    topicTag: plan.topicTag || undefined,
   });
 
   // 連投時のレート制限・処理待ちのクッションとして少し空ける
@@ -231,6 +231,7 @@ export async function postFullThread(plan: ThreadPostPlan): Promise<ThreadPostRe
     text: plan.text2,
     imageUrl: plan.photoUrl2 || undefined,
     replyToId: firstPostId,
+    topicTag: plan.topicTag || undefined,
   });
 
   return { firstPostId, secondPostId };
