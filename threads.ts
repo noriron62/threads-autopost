@@ -133,19 +133,23 @@ export async function postFirstThread(input: FirstPostInput): Promise<string> {
 
 interface SecondPostInput {
   text: string; // 2/2本文(アフィリエイトリンクを含む)
-  imageUrl: string; // 1枚
+  imageUrl?: string; // 1枚。空欄なら文字だけの投稿にする
   replyToId: string; // 1/2投稿のID
 }
 
 export async function postSecondThread(input: SecondPostInput): Promise<string> {
   const { userId } = getConfig();
 
-  const container = await callThreadsApi(`/${userId}/threads`, {
-    media_type: "IMAGE",
-    image_url: input.imageUrl,
+  const params: Record<string, string> = {
+    media_type: input.imageUrl ? "IMAGE" : "TEXT",
     text: input.text,
     reply_to_id: input.replyToId,
-  });
+  };
+  if (input.imageUrl) {
+    params.image_url = input.imageUrl;
+  }
+
+  const container = await callThreadsApi(`/${userId}/threads`, params);
 
   const creationId = container.id as string;
 
@@ -196,7 +200,7 @@ export interface ThreadPostPlan {
   photoUrls: string[];
   topicTag: string; // "" なら未指定
   text2: string;
-  photoUrl2: string;
+  photoUrl2: string; // "" なら写真なし(文字だけ)の2/2投稿にする
 }
 
 export interface ThreadPostResult {
@@ -216,7 +220,7 @@ export async function postFullThread(plan: ThreadPostPlan): Promise<ThreadPostRe
 
   const secondPostId = await postSecondThread({
     text: plan.text2,
-    imageUrl: plan.photoUrl2,
+    imageUrl: plan.photoUrl2 || undefined,
     replyToId: firstPostId,
   });
 

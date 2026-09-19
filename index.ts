@@ -28,7 +28,7 @@ async function main() {
       }
       if (!row.text1) throw new Error("1/2本文が空です");
       if (!row.text2) throw new Error("2/2本文が空です");
-      if (!row.photoUrl2) throw new Error("2/2写真URLが空です");
+      // 2/2の写真は任意: 空欄なら文字だけの投稿になる
 
       const result = await postFullThread({
         text1: row.text1,
