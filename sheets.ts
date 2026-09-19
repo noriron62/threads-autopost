@@ -133,7 +133,7 @@ export async function findDueRows(spreadsheetId: string): Promise<PostRow[]> {
 function parseDateCell(value: string | undefined): Date | null {
   if (!value) return null;
   // "2026-09-25 19:00" のような形式を想定
-  const normalized = value.trim().replace(" ", "T");
+  const normalized = value.trim().replace(" ", "T") + "+09:00";
   const date = new Date(normalized);
   if (isNaN(date.getTime())) return null;
   return date;
