@@ -101,38 +101,64 @@ interface FirstPostInput {
 }
 
 /**
- * カルーセル投稿(1/2)を作成・公開し、公開後の投稿IDを返す。
+ * 1/2投稿を作成・公開し、公開後の投稿IDを返す。
+ * 写真の枚数に応じて自動的に投稿形式を切り替える:
+ *   0枚 → 文字のみ(TEXT)
+ *   1枚 → 単一画像(IMAGE)
+ *   2〜4枚 → カルーセル(CAROUSEL)
  */
 export async function postFirstThread(input: FirstPostInput): Promise<string> {
   const { userId } = getConfig();
 
-  if (input.imageUrls.length < 2 || input.imageUrls.length > 4) {
-    throw new Error(
-      `1/2投稿の画像枚数が想定外です(2〜4枚のはずが${input.imageUrls.length}枚)`
-    );
+  if (input.imageUrls.length > 4) {
+    throw new Error(`1/2投稿の画像枚数が想定外です(0〜4枚のはずが${input.imageUrls.length}枚)`);
   }
 
-  // 1. 画像ごとに子コンテナを作成し、それぞれ処理完了(FINISHED)を待ってから次に進む
-  //   (完了前にカルーセル本体を作ろうとすると、タイミングによって失敗することがあるため)
-  const childrenIds: string[] = [];
-  for (const url of input.imageUrls) {
-    const id = await createCarouselItemContainer(url);
-    await waitUntilContainerReady(id);
-    childrenIds.push(id);
+  let creationId: string;
+
+  if (input.imageUrls.length === 0) {
+    // 文字のみの投稿
+    const params: Record<string, string> = {
+      media_type: "TEXT",
+      text: input.text,
+    };
+    applyTopicTag(params, input.topicTag);
+    const container = await callThreadsApi(`/${userId}/threads`, params);
+    creationId = container.id as string;
+  } else if (input.imageUrls.length === 1) {
+    // 画像1枚のみの投稿(カルーセルにはしない)
+    const params: Record<string, string> = {
+      media_type: "IMAGE",
+      image_url: input.imageUrls[0],
+      text: input.text,
+    };
+    applyTopicTag(params, input.topicTag);
+    const container = await callThreadsApi(`/${userId}/threads`, params);
+    creationId = container.id as string;
+  } else {
+    // 2〜4枚: カルーセル投稿
+    // 1. 画像ごとに子コンテナを作成し、それぞれ処理完了(FINISHED)を待ってから次に進む
+    //   (完了前にカルーセル本体を作ろうとすると、タイミングによって失敗することがあるため)
+    const childrenIds: string[] = [];
+    for (const url of input.imageUrls) {
+      const id = await createCarouselItemContainer(url);
+      await waitUntilContainerReady(id);
+      childrenIds.push(id);
+    }
+
+    // 2. カルーセル本体のコンテナを作成
+    const carouselParams: Record<string, string> = {
+      media_type: "CAROUSEL",
+      children: childrenIds.join(","),
+      text: input.text,
+    };
+    applyTopicTag(carouselParams, input.topicTag);
+
+    const carouselContainer = await callThreadsApi(`/${userId}/threads`, carouselParams);
+    creationId = carouselContainer.id as string;
   }
 
-  // 2. カルーセル本体のコンテナを作成
-  const carouselParams: Record<string, string> = {
-    media_type: "CAROUSEL",
-    children: childrenIds.join(","),
-    text: input.text,
-  };
-  applyTopicTag(carouselParams, input.topicTag);
-
-  const carouselContainer = await callThreadsApi(`/${userId}/threads`, carouselParams);
-  const creationId = carouselContainer.id as string;
-
-  // 3. 公開前に、コンテナの処理が完了するまで少し待つ
+  // 公開前に、コンテナの処理が完了するまで少し待つ
   //   (Threads API推奨: 平均30秒。念のため状態確認もはさむ)
   await waitUntilContainerReady(creationId);
 

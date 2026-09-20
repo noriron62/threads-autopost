@@ -21,11 +21,7 @@ async function main() {
 
     try {
       // 入力チェック(最低限のバリデーション)
-      if (row.photoUrls.length < 2) {
-        throw new Error(
-          `1/2投稿の写真が${row.photoUrls.length}枚しかありません(2〜4枚必要)`
-        );
-      }
+      // 1/2の写真は任意: 0枚なら文字のみ、1枚なら単一画像、2〜4枚ならカルーセルになる
       if (!row.text1) throw new Error("1/2本文が空です");
       if (!row.text2) throw new Error("2/2本文が空です");
       // 2/2の写真は任意: 空欄なら文字だけの投稿になる
