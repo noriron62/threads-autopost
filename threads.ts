@@ -75,6 +75,45 @@ function applyTopicTag(params: Record<string, string>, topicTag: string | undefi
 }
 
 // ============================================
+// 公開(publish)の共通処理
+// ============================================
+// FINISHEDを確認した直後でも、Threads側の内部反映が間に合わず
+// 「The requested resource does not exist(Media Not Found)」になることがあるため、
+// 少し待ってから複数回リトライする。
+async function publishContainer(
+  userId: string,
+  creationId: string,
+  maxAttempts = 4,
+  retryDelayMs = 8000
+): Promise<string> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const publishResult = await callThreadsApi(`/${userId}/threads_publish`, {
+        creation_id: creationId,
+      });
+      return publishResult.id as string;
+    } catch (err) {
+      lastError = err;
+      const message = err instanceof Error ? err.message : String(err);
+      const isNotFound = message.includes("does not exist") || message.includes("Media Not Found");
+
+      if (!isNotFound || attempt === maxAttempts) {
+        throw err;
+      }
+
+      console.warn(
+        `公開に失敗しました(試行${attempt}/${maxAttempts})。${retryDelayMs / 1000}秒待って再試行します: ${message}`
+      );
+      await sleep(retryDelayMs);
+    }
+  }
+
+  throw lastError;
+}
+
+// ============================================
 // ステップ1: 画像1枚ごとのコンテナ作成(カルーセルの部品)
 // ============================================
 
@@ -162,11 +201,7 @@ export async function postFirstThread(input: FirstPostInput): Promise<string> {
   //   (Threads API推奨: 平均30秒。念のため状態確認もはさむ)
   await waitUntilContainerReady(creationId);
 
-  const publishResult = await callThreadsApi(`/${userId}/threads_publish`, {
-    creation_id: creationId,
-  });
-
-  return publishResult.id as string; // 公開された1/2投稿のID
+  return publishContainer(userId, creationId); // 公開された1/2投稿のID
 }
 
 // ============================================
@@ -199,11 +234,7 @@ export async function postSecondThread(input: SecondPostInput): Promise<string> 
 
   await waitUntilContainerReady(creationId);
 
-  const publishResult = await callThreadsApi(`/${userId}/threads_publish`, {
-    creation_id: creationId,
-  });
-
-  return publishResult.id as string;
+  return publishContainer(userId, creationId);
 }
 
 // ============================================
