@@ -212,27 +212,35 @@ export async function postSecondThread(input: SecondPostInput): Promise<string> 
 
 async function waitUntilContainerReady(
   creationId: string,
-  maxWaitMs = 60000,
+  maxWaitMs = 90000,
   intervalMs = 5000
 ): Promise<void> {
   const { accessToken } = getConfig();
   const startedAt = Date.now();
+  let lastStatus = "UNKNOWN";
 
   while (Date.now() - startedAt < maxWaitMs) {
     const url = `${GRAPH_API_BASE}/${creationId}?fields=status,error_message&access_token=${accessToken}`;
     const res = await fetch(url);
     const data = await res.json();
+    lastStatus = data.status ?? "UNKNOWN";
 
-    if (data.status === "FINISHED") return;
-    if (data.status === "ERROR") {
+    if (lastStatus === "FINISHED") return;
+    if (lastStatus === "ERROR") {
       throw new Error(`コンテナ処理が失敗しました: ${data.error_message ?? "詳細不明"}`);
     }
-    // IN_PROGRESS や EXPIRED 以外の場合はそのまま待機を続ける
+    if (lastStatus === "EXPIRED") {
+      throw new Error("コンテナの有効期限が切れました(EXPIRED)。もう一度最初からやり直してください。");
+    }
+    // IN_PROGRESS の場合はそのまま待機を続ける
     await sleep(intervalMs);
   }
 
-  // タイムアウトしても、Threads側の推奨(平均30秒待てば大抵OK)に従い
-  // 一応公開を試みる(呼び出し元でエラーハンドリングされる)
+  // タイムアウトした場合、未完了のまま公開すると「resource does not exist」等の
+  // 分かりにくいエラーになるため、ここで明確に失敗させる
+  throw new Error(
+    `コンテナの処理完了を${maxWaitMs / 1000}秒待ちましたが終わりませんでした(最終状態: ${lastStatus})`
+  );
 }
 
 // ============================================
