@@ -5,6 +5,12 @@ name: Threads Autopost
 on:
   workflow_dispatch:
 
+# 前回の実行がまだ終わっていない場合、新しい実行はキャンセルせず待機させる。
+# (同じ投稿予定を二重に処理してしまうのを防ぐため)
+concurrency:
+  group: threads-autopost
+  cancel-in-progress: false
+
 jobs:
   post:
     runs-on: ubuntu-latest
